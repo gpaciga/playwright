@@ -19,7 +19,7 @@ import * as React from 'react';
 import './colors.css';
 import './common.css';
 import { Filter } from './filter';
-import { HeaderTitleView, HeaderView } from './headerView';
+import { HeaderView } from './headerView';
 import { Route, SearchParamsContext } from './links';
 import type { LoadedReport } from './loadedReport';
 import './reportView.css';
@@ -63,23 +63,85 @@ export const ReportView: React.FC<{
   const filteredStats = React.useMemo(() => filter.empty() ? undefined : computeStats(report?.json().files || [], filter), [report, filter]);
   const filteredTests = React.useMemo(() => {
     const result: TestModelSummary = { files: [], tests: [] };
+    const testsByPath = new Map<string, TestCaseSummary[]>();
+    
+    // First, collect tests by their path + title (unique test identifier)
     for (const file of report?.json().files || []) {
-      const tests = file.tests.filter(t => filter.matches(t));
-      if (tests.length)
-        result.files.push({ ...file, tests });
-      result.tests.push(...tests);
+      for (const test of file.tests) {
+        if (filter.matches(test)) {
+          const testKey = [...test.path, test.title].join(' › ');
+          if (!testsByPath.has(testKey)) {
+            testsByPath.set(testKey, []);
+          }
+          testsByPath.get(testKey)!.push(test);
+        }
+      }
     }
+    
+    // Group tests that have the same path and title but different projects
+    for (const file of report?.json().files || []) {
+      const fileTests: TestCaseSummary[] = [];
+      
+      for (const test of file.tests) {
+        if (filter.matches(test)) {
+          const testKey = [...test.path, test.title].join(' › ');
+          const groupedTests = testsByPath.get(testKey);
+          
+          // If this test is already processed or doesn't exist, skip it
+          if (!groupedTests || groupedTests.length === 0) continue;
+          
+          // Take the first test as the representative for the group
+          const representativeTest = { ...groupedTests[0] };
+          
+          // Update outcome to worst case across all projects
+          let hasFailure = false;
+          let hasFlaky = false;
+          
+          // Store project references and summary results
+          representativeTest.projectResults = groupedTests.map(t => ({
+            testId: t.testId,
+            projectName: t.projectName
+          }));
+          
+          // Store summary results with project info
+          representativeTest.results = [];
+          for (const t of groupedTests) {
+            if (t.outcome === 'unexpected') hasFailure = true;
+            if (t.outcome === 'flaky') hasFlaky = true;
+            
+            // Keep track of each project's results with project name
+            const projectResults = t.results.map(r => ({ 
+              ...r,
+              projectName: t.projectName
+            }));
+            representativeTest.results.push(...projectResults);
+          }
+          
+          // Update outcome based on all grouped tests
+          if (hasFailure) {
+            representativeTest.outcome = 'unexpected';
+            representativeTest.ok = false;
+          } else if (hasFlaky) {
+            representativeTest.outcome = 'flaky';
+            representativeTest.ok = false;
+          }
+          
+          // Add merged test to this file's tests
+          fileTests.push(representativeTest);
+          
+          // Clear the tests from the map so we don't process them again
+          testsByPath.set(testKey, []);
+        }
+      }
+      
+      if (fileTests.length) {
+        result.files.push({ ...file, tests: fileTests });
+        result.tests.push(...fileTests);
+      }
+    }
+    
     return result;
   }, [report, filter]);
-
-  const reportTitle = report?.json()?.title;
-
-  React.useEffect(() => {
-    if (reportTitle)
-      document.title = reportTitle;
-    else
-      document.title = 'Playwright Test Report';
-  }, [reportTitle]);
 
   return <div className='htmlreport vbox px-4 pb-4'>
     <main>
@@ -106,7 +168,7 @@ const TestCaseViewLoader: React.FC<{
   testIdToFileIdMap: Map<string, string>,
 }> = ({ report, testIdToFileIdMap, tests }) => {
   const searchParams = React.useContext(SearchParamsContext);
-  const [test, setTest] = React.useState<TestCase | 'loading' | 'not-found'>('loading');
+  const [test, setTest] = React.useState<TestCase | undefined>();
   const testId = searchParams.get('testId');
   const run = +(searchParams.get('run') || '0');
 
@@ -119,37 +181,75 @@ const TestCaseViewLoader: React.FC<{
 
   React.useEffect(() => {
     (async () => {
-      if (!testId || (typeof test === 'object' && testId === test.testId))
+      if (!testId || testId === test?.testId)
         return;
       const fileId = testIdToFileIdMap.get(testId);
-      if (!fileId) {
-        setTest('not-found');
+      if (!fileId)
         return;
-      }
       const file = await report.entry(`${fileId}.json`) as TestFile;
-      setTest(file?.tests.find(t => t.testId === testId) || 'not-found');
+      for (const t of file.tests) {
+        if (t.testId === testId) {
+          // Find the test in our filtered list which may have merged results
+          const mergedTest = tests.find(test => test.testId === testId);
+          
+          if (mergedTest && mergedTest.projectResults && mergedTest.projectResults.length > 0) {
+            // We need to load the detailed test results for each project
+            const projectPromises = mergedTest.projectResults.map(async (projectResult) => {
+              const projectFileId = testIdToFileIdMap.get(projectResult.testId);
+              if (!projectFileId) return null;
+              
+              const projectFile = await report.entry(`${projectFileId}.json`) as TestFile;
+              const projectTest = projectFile.tests.find(t => t.testId === projectResult.testId);
+              return projectTest ? { 
+                ...projectTest,
+                projectName: projectResult.projectName
+              } : null;
+            });
+            
+            // Wait for all project tests to load
+            const projectTests = (await Promise.all(projectPromises)).filter(Boolean) as TestCase[];
+            
+            // Create a merged test with all project results
+            if (projectTests.length > 0) {
+              // Combine all project test results
+              const combinedResults: TestResult[] = [];
+              
+              projectTests.forEach(projectTest => {
+                projectTest.results.forEach((result, retryIndex) => {
+                  combinedResults.push({
+                    ...result,
+                    projectName: projectTest.projectName,
+                    retry: retryIndex  // Keep the original retry index for each project
+                  });
+                });
+              });
+              
+              // Create the full test with all project results
+              const fullTest: TestCase = {
+                ...t,  // Base structure from original test
+                results: combinedResults
+              };
+              
+              setTest(fullTest);
+            } else {
+              setTest(t);
+            }
+          } else {
+            setTest(t);
+          }
+          break;
+        }
+      }
     })();
-  }, [test, report, testId, testIdToFileIdMap]);
+  }, [test, report, testId, testIdToFileIdMap, tests]);
 
-  if (test === 'loading')
-    return <div className='test-case-column vbox'></div>;
-
-  if (test === 'not-found') {
-    return <div className='test-case-column vbox'>
-      <HeaderTitleView title='Test not found' />
-      <div className='test-case-location'>Test ID: {testId}</div>
-    </div>;
-  }
-
-  return <div className='test-case-column vbox'>
-    <TestCaseView
-      projectNames={report.json().projectNames}
-      next={next}
-      prev={prev}
-      test={test}
-      run={run}
-    />
-  </div>;
+  return <TestCaseView
+    projectNames={report.json().projectNames}
+    next={next}
+    prev={prev}
+    test={test}
+    run={run}
+  />;
 };
 
 function computeStats(files: TestFileSummary[], filter: Filter): FilteredStats {

@@ -60,7 +60,7 @@ export const ProjectLink: React.FunctionComponent<{
   const encoded = encodeURIComponent(projectName);
   const value = projectName === encoded ? projectName : `"${encoded.replace(/%22/g, '%5C%22')}"`;
   return <Link href={`#?q=p:${value}`}>
-    <span className={clsx('label', `label-color-${projectNames.indexOf(projectName) % 6}`)} style={{ margin: '6px 0 0 6px' }}>
+    <span className={clsx('label', 'project-tag', `label-color-${projectNames.indexOf(projectName) % 6}`)} style={{ margin: '6px 0 0 6px' }}>
       {projectName}
     </span>
   </Link>;
@@ -77,22 +77,10 @@ export const AttachmentLink: React.FunctionComponent<{
   useAnchor('attachment-' + result.attachments.indexOf(attachment), triggerFlash);
   return <TreeItem title={<span>
     {attachment.contentType === kMissingContentType ? icons.warning() : icons.attachment()}
-    {attachment.path && (
-      openInNewTab
-        ? <a href={href || attachment.path} target='_blank' rel='noreferrer'>{linkName || attachment.name}</a>
-        : <a href={href || attachment.path} download={downloadFileNameForAttachment(attachment)}>{linkName || attachment.name}</a>
-    )}
+    {attachment.path && <a href={href || attachment.path} download={downloadFileNameForAttachment(attachment)}>{linkName || attachment.name}</a>}
     {!attachment.path && (
       openInNewTab
-        ? (
-          <a
-            href={URL.createObjectURL(new Blob([attachment.body!], { type: attachment.contentType }))}
-            target='_blank' rel='noreferrer'
-            onClick={e => e.stopPropagation() /* dont expand the tree item */}
-          >
-            {attachment.name}
-          </a>
-        )
+        ? <a href={URL.createObjectURL(new Blob([attachment.body!], { type: attachment.contentType }))} target='_blank' rel='noreferrer' onClick={e => e.stopPropagation()}>{attachment.name}</a>
         : <span>{linkifyText(attachment.name)}</span>
     )}
   </span>} loadChildren={attachment.body ? () => {

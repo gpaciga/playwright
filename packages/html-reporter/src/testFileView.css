@@ -53,16 +53,6 @@
 
 .test-file-badge {
   flex: none;
-  background-color: transparent;
-  border-color: transparent;
-}
-
-.test-file-badge span {
-  color: var(--color-fg-subtle);
-}
-
-.test-file-badge:hover {
-  cursor: pointer;
 }
 
 .test-file-badge svg {
@@ -86,4 +76,9 @@
   align-items: center;
   gap: 8px;
   color: var(--color-fg-subtle);
+}
+
+.test-file-test .project-tag {
+  margin-right: 5px;
+  display: inline-block;
 }

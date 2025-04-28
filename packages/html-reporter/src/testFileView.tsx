@@ -51,8 +51,12 @@ export const TestFileView: React.FC<React.PropsWithChildren<{
               <Link href={testResultHref({ test }) + filterParam} title={[...test.path, test.title].join(' › ')}>
                 <span className='test-file-title'>{[...test.path, test.title].join(' › ')}</span>
               </Link>
-              {projectNames.length > 1 && !!test.projectName &&
-              <ProjectLink projectNames={projectNames} projectName={test.projectName} />}
+              {/* Show all projects this test is part of */}
+              {test.results.length > 0 && projectNames.length > 1 && 
+                Array.from(new Set(test.results.map(r => r.projectName))).filter(Boolean).map(projectName => 
+                  <ProjectLink key={projectName} projectNames={projectNames} projectName={projectName!} />
+                )
+              }
               <LabelsClickView labels={test.tags} />
             </span>
           </div>
@@ -87,16 +91,7 @@ function videoBadge(test: TestCaseSummary): JSX.Element | undefined {
 
 function traceBadge(test: TestCaseSummary): JSX.Element | undefined {
   const firstTraces = test.results.map(result => result.attachments.filter(attachment => attachment.name === 'trace')).filter(traces => traces.length > 0)[0];
-  if (!firstTraces)
-    return undefined;
-
-  return <Link
-    href={generateTraceUrl(firstTraces)}
-    title='View Trace'
-    className='button test-file-badge'>
-    {trace()}
-    <span>View Trace</span>
-  </Link>;
+  return firstTraces ? <Link href={generateTraceUrl(firstTraces)} title='View trace' className='test-file-badge'>{trace()}</Link> : undefined;
 }
 
 const LabelsClickView: React.FC<React.PropsWithChildren<{

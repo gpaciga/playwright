@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import type { TestAnnotation, Metadata } from '@playwright/test';
+import type { Metadata } from '@playwright/test';
 
 export type Stats = {
   total: number;
@@ -38,7 +38,6 @@ export type Location = {
 
 export type HTMLReport = {
   metadata: Metadata;
-  title: string | undefined;
   files: TestFileSummary[];
   stats: Stats;
   projectNames: string[];
@@ -60,22 +59,31 @@ export type TestFileSummary = {
   stats: Stats;
 };
 
+export type TestCaseAnnotation = { type: string, description?: string };
+
+export type ProjectTestResult = {
+  testId: string;
+  projectName: string;
+};
+
 export type TestCaseSummary = {
   testId: string,
   title: string;
   path: string[];
   projectName: string;
   location: Location;
-  annotations: TestAnnotation[];
+  annotations: TestCaseAnnotation[];
   tags: string[];
   outcome: 'skipped' | 'expected' | 'unexpected' | 'flaky';
   duration: number;
   ok: boolean;
   results: TestResultSummary[];
+  projectResults?: ProjectTestResult[]; // Store original test IDs for each project
 };
 
 export type TestResultSummary = {
   attachments: { name: string, contentType: string, path?: string }[];
+  projectName?: string; // Add project name to track which project a result belongs to
 };
 
 export type TestCase = Omit<TestCaseSummary, 'results'> & {
@@ -97,7 +105,7 @@ export type TestResult = {
   errors: string[];
   attachments: TestAttachment[];
   status: 'passed' | 'failed' | 'timedOut' | 'skipped' | 'interrupted';
-  annotations: TestAnnotation[];
+  projectName?: string; // Add project name to track which project a result belongs to
 };
 
 export type TestStep = {
