@@ -34,6 +34,14 @@
   color: var(--color-fg-default);
 }
 
+.test-case-title {
+  flex: none;
+  padding: 8px;
+  font-weight: 400;
+  font-size: 32px !important;
+  line-height: 1.25 !important;
+}
+
 .test-case-location,
 .test-case-duration {
   flex: none;
@@ -45,6 +53,33 @@
 .test-case-run-duration {
   color: var(--color-fg-subtle);
   padding-left: 8px;
+}
+
+.test-case-project-name {
+  padding: 0 8px;
+  font-weight: 500;
+  color: var(--color-link);
+  font-size: 90%;
+}
+
+.test-case-projects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+/* Nested tab styling */
+.test-case-column .tab-container .tab-container {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  background-color: var(--color-canvas-subtle);
+  border-radius: 6px;
+  padding-bottom: 5px;
+}
+
+.test-case-column .tab-container .tab-container .tab-element {
+  font-size: 90%;
+  padding: 4px 10px;
 }
 
 .test-case-path {
